@@ -72,10 +72,24 @@ export class AvitechHttpApi {
 			return trimmed
 		}
 
+		let parsed: AvitechResponse
 		try {
-			return JSON.parse(trimmed)
+			parsed = JSON.parse(trimmed)
 		} catch {
 			return trimmed
 		}
+
+		// Undocumented in the v1.0.8 reference guide: some commands on newer firmware reply with a
+		// {"cb_status":"..."} envelope instead of the documented "Success"/"Wrong format" strings
+		// when a command is rejected (observed value so far: "Not Permitted"). Surface that as a
+		// thrown error the same way "Wrong format" is, rather than letting it look like a success.
+		if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+			const cbStatus = parsed.cb_status
+			if (typeof cbStatus === 'string' && !/^(ok|success)$/i.test(cbStatus)) {
+				throw new AvitechApiError(`Device reported: ${cbStatus}`)
+			}
+		}
+
+		return parsed
 	}
 }
