@@ -2,17 +2,17 @@
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"type": "connection",
 	"id": "avitech-4k604k60L",
-	"name": "Avitech 4K60L",
+	"name": "Avitech 4K60 & 4K60L",
 	"shortname": "avitech-4k604k60L",
-	"description": "A short one line description of your module",
+	"description": "Companion Module for Avitech 4K60 & 4K60L",
 	"version": "0.0.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/chavitech/companion-module-avitech-4k604k60L.git",
 	"bugs": "https://github.com/chavitech/companion-module-avitech-4k604k60L/issues",
 	"maintainers": [
 		{
-			"name": "Your name",
-			"email": "Your email"
+			"name": "Chase Sanville",
+			"email": "chase@avitechvideo.com"
 		}
 	],
 	"runtime": {
@@ -22,7 +22,7 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "Your company",
-	"products": ["Your product"],
+	"manufacturer": "Avitech",
+	"products": ["4K60", "4K60L"],
 	"keywords": []
 }
