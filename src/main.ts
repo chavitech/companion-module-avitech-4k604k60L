@@ -30,7 +30,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	async init(config: ModuleConfig): Promise<void> {
 		this.config = config
 		this.api = new AvitechHttpApi(this)
-		this.adapter = createAdapter(this.config.model, this, this.api)
+		this.adapter = createAdapter(this.config.mode, this, this.api)
 
 		this.updateActions() // export actions
 		this.updateFeedbacks() // export feedbacks
@@ -46,7 +46,8 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 
 	async configUpdated(config: ModuleConfig): Promise<void> {
 		this.config = config
-		this.adapter = createAdapter(this.config.model, this, this.api)
+		this.adapter = createAdapter(this.config.mode, this, this.api)
+		this.updateActions() // action list/options depend on the configured mode
 
 		await this.checkConnection()
 	}

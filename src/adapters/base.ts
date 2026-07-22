@@ -1,4 +1,4 @@
-import type { AvitechHttpApi } from '../avitech-api.js'
+import type { AvitechHttpApi, AvitechResponse } from '../avitech-api.js'
 import type { DeviceModel } from '../models.js'
 import type ModuleInstance from '../main.js'
 
@@ -14,10 +14,11 @@ export interface SequoiaCapabilities {
 }
 
 /**
- * Base class for a model-specific adapter. Shared commands (see reference guide sections 1.3.1
- * and 1.3.2) can be implemented directly against `api` wherever they're needed; commands that
- * differ per-model (sections 1.3.3/1.3.4/1.3.5 - routing, K/M mode, audio, resolution) belong on
- * the concrete subclasses below so callers don't need to branch on `model` themselves.
+ * Base class for a model-specific adapter. The three methods below (routing/audio) are supported
+ * in the same wire shape across every mode of both models, so they're pulled up here for callers
+ * that don't need to know which concrete adapter they're holding. Commands that only exist for
+ * one model (K/M mode, output resolution, daisy-chain label text - see reference guide sections
+ * 1.3.4/1.3.5) live only on `Sequoia4K60LAdapter`, and callers narrow with `instanceof` first.
  */
 export abstract class SequoiaAdapter {
 	abstract readonly model: DeviceModel
@@ -27,4 +28,8 @@ export abstract class SequoiaAdapter {
 		protected readonly self: ModuleInstance,
 		protected readonly api: AvitechHttpApi,
 	) {}
+
+	abstract setRouting(input: number, port: number, winid: number): Promise<void>
+	abstract getRouting(): Promise<AvitechResponse>
+	abstract setAudio(port: number, winid: number): Promise<void>
 }
