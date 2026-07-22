@@ -1,14 +1,14 @@
 {
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"type": "connection",
-	"id": "avitech-4k604k60L",
+	"id": "companion-module-avitech-sequoia4k60-sequoia4k60l",
 	"name": "Avitech 4K60 & 4K60L",
 	"shortname": "avitech-4k604k60L",
 	"description": "Companion Module for Avitech 4K60 & 4K60L",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/chavitech/companion-module-avitech-4k604k60L.git",
-	"bugs": "https://github.com/chavitech/companion-module-avitech-4k604k60L/issues",
+	"repository": "git+https://github.com/bitfocus/companion-module-avitech-sequoia4k60-sequoia4k60l.git",
+	"bugs": "https://github.com/bitfocus/companion-module-avitech-sequoia4k60-sequoia4k60l/issues",
 	"maintainers": [
 		{
 			"name": "Chase Sanville",
