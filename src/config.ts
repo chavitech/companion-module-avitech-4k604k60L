@@ -1,12 +1,22 @@
 import { Regex, type SomeCompanionConfigField } from '@companion-module/base'
+import { DEVICE_MODEL_CHOICES, type DeviceModel } from './models.js'
 
 export type ModuleConfig = {
+	model: DeviceModel
 	host: string
 	port: number
 }
 
 export function GetConfigFields(): SomeCompanionConfigField[] {
 	return [
+		{
+			type: 'dropdown',
+			id: 'model',
+			label: 'Model',
+			width: 6,
+			choices: DEVICE_MODEL_CHOICES,
+			default: DEVICE_MODEL_CHOICES[0].id,
+		},
 		{
 			type: 'textinput',
 			id: 'host',
@@ -21,7 +31,7 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			width: 4,
 			min: 1,
 			max: 65535,
-			default: 8000,
+			default: 80,
 		},
 	]
 }
