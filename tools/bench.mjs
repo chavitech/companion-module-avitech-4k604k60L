@@ -336,7 +336,7 @@ const COMMANDS = [
 		id: 'reset_factory_defaults',
 		section: '1.3.1.11',
 		name: 'Reset Factory Defaults',
-		warn: 'Destructive and immediate. Resets the unit and erases EVERY custom preset in its flash memory. No confirmation, no undo. Do not press this on a unit whose presets are not backed up.',
+		warn: 'Destructive. Resets the unit and erases EVERY custom preset in its flash memory. It applies on the next reboot, not on send, so a unit that has been sent this keeps working normally until it is power-cycled — do not leave one in that state for someone else to find.',
 		fields: [],
 		run: () => adapter.resetFactoryDefaults(),
 	},

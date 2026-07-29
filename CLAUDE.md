@@ -53,7 +53,8 @@ Two things the bench does that Companion does not:
 - **It renders an unconditional `warn` on destructive commands.** Separate from `warnInDaisyChain`,
   which only fires in daisy-chain mode. Reset Factory Defaults (§1.3.1.11) and Custom Preset —
   Delete (§1.3.1.9) erase device state in every mode, and the bench fires on a single click with no
-  confirmation.
+  confirmation. Unlike Companion — where a button has to be deliberately created and the action
+  assigned to it — one click on the bench page is the whole gesture.
 
 ## Model / mode design
 
@@ -131,10 +132,19 @@ justified rather than precautionary:
   §1.3.2 command with a known harmful effect in this mode. Companion won't offer it there, but
   `tools/bench.mjs` does not gate by mode and will happily fire it.
 
-**§1.3.1 has not been bench-tested.** Every request shape in it was verified against the guide's
-worked examples and nothing more. That is a weaker claim than it sounds — the §1.3.2 findings above
-were also guide-faithful right up until hardware showed that `z` and `global_option` behave nothing
-like the documentation says. Specific things to establish on real hardware before trusting them:
+**§1.3.1 is almost entirely un-bench-tested.** Every request shape in it was verified against the
+guide's worked examples and nothing more. That is a weaker claim than it sounds — the §1.3.2
+findings above were also guide-faithful right up until hardware showed that `z` and `global_option`
+behave nothing like the documentation says.
+
+The one exception, tested on a 4K60L on 2026-07-29: **Reset Factory Defaults (§1.3.1.11) does not
+apply when sent.** The unit carries on with its presets and full command set intact, and the reset
+only lands on the next reboot. So the destructive window closes at the power cut, not at the button
+press, and a unit that has been sent this looks completely normal until someone reboots it. Warnings
+in `base.ts`, `actions.ts` and `bench.mjs` say "destructive" without saying "immediate" for exactly
+this reason — do not re-tighten that wording without re-testing.
+
+Specific things to establish on real hardware before trusting them:
 
 - The `get` responses (firmware, signal type, network, OSD info, custom preset list) are all
   screenshot-only in the guide, so no captured shape is recorded for any of them. Signal Type

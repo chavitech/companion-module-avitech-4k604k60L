@@ -789,8 +789,9 @@ export function UpdateActions(self: ModuleInstance): void {
 				}
 			: undefined
 
-	// The device performs this with no confirmation step and no way back, so the action name and
-	// tooltip carry the warning the wire protocol does not.
+	// Destructive, but not instant - the reset lands on the next reboot (measured, see
+	// `resetFactoryDefaults`). The name and static-text field carry the warning the wire protocol
+	// does not, and describe the actual timing rather than overstating it.
 	const reset_factory_defaults:
 		CompanionActionDefinition<ActionsSchema['reset_factory_defaults']['options']> | undefined = supportsSystemCommands
 		? {
@@ -801,7 +802,7 @@ export function UpdateActions(self: ModuleInstance): void {
 						type: 'static-text',
 						label: 'Warning',
 						value:
-							'This resets the device to its factory state and permanently erases every custom preset stored in its flash memory. It takes effect immediately when the button is pressed - there is no confirmation prompt and no undo. Back presets up externally first.',
+							'Resets the device to its factory state and erases every custom preset stored in its flash memory. There is no confirmation prompt. The reset applies on the next reboot, not on the button press, so the unit keeps running normally in the meantime - but once it is power-cycled the presets are gone. Back them up externally.',
 					},
 				],
 				callback: async () => {

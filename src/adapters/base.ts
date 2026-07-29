@@ -332,10 +332,16 @@ export abstract class SequoiaAdapter {
 	/**
 	 * Table 1.3.1.11. Resets the unit to its factory-default state.
 	 *
-	 * This erases every custom preset stored in the unit's flash memory as a side effect - the guide
-	 * says so explicitly and tells the reader to back presets up externally first. There is no
-	 * confirmation step on the wire and no way to undo it, so the calling action is named and
-	 * tooltipped to make that unmissable.
+	 * This erases every custom preset stored in the unit's flash memory - the guide says so
+	 * explicitly and tells the reader to back presets up externally first.
+	 *
+	 * It does not take effect when sent. Tested on a 4K60L on 2026-07-29: the unit keeps running with
+	 * its presets and normal command set fully intact, and the reset only lands on the next reboot.
+	 * So there is a real window to recover in - back the presets up, or simply avoid power-cycling -
+	 * and the loss becomes permanent at the power cut rather than at the button press. Warnings
+	 * downstream say "destructive" without saying "immediate", because the second part is not true.
+	 *
+	 * There is still no confirmation step on the wire and no command to cancel a pending reset.
 	 *
 	 * Note the request is nothing like `loadDefaultLayout` despite both reading as "default": this
 	 * is `Info` / `set` / `default` and wipes the device, that is `2060` / `load` / `default` and
