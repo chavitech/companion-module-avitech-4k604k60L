@@ -79,13 +79,19 @@ function parseArgs(argv) {
 let config
 let adapter
 
-/** Records the last request so the response handler can report the exact URL that was sent. */
-let lastRequest = null
+/**
+ * Every request made while handling one button press. An adapter method can make more than one -
+ * `setWindowGeometry` reads the current geometry before it writes - and the whole point of this
+ * tool is to show what actually went over the wire, so all of them are reported.
+ */
+let requestLog = []
 
 /**
- * Stands in for AvitechHttpApi. Builds the URL identically to `AvitechHttpApi.buildUrl()` and
- * returns the raw text rather than parsing it - the whole point here is to see what the device
- * actually said, including undocumented envelopes like {"cb_status":"Not Permitted"}.
+ * Stands in for AvitechHttpApi, and must stay behaviourally identical to it: adapter methods that
+ * consume another command's return value (again, `setWindowGeometry`) only work if this parses
+ * responses the way the real client does. Mirrors `AvitechHttpApi.buildUrl()` and `parseResponse()`.
+ *
+ * The raw text is recorded separately regardless, so nothing is hidden by the parsing.
  */
 const api = {
 	async sendCommand(cmd, param) {
@@ -94,16 +100,42 @@ const api = {
 			cmd,
 		)}&param=${encodeURIComponent(JSON.stringify(param))}`
 
-		lastRequest = { url, cmd, param }
+		const entry = { url, cmd, param }
+		requestLog.push(entry)
 
 		const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
 		const raw = await response.text()
 
-		lastRequest.httpStatus = response.status
-		lastRequest.raw = raw
+		entry.httpStatus = response.status
+		entry.raw = raw
 
-		return raw
+		return parseResponse(raw)
 	},
+}
+
+/** Kept in step with `AvitechHttpApi.parseResponse()` in src/avitech-api.ts. */
+function parseResponse(text) {
+	const trimmed = text.trim()
+
+	if (trimmed === 'Wrong format') throw new Error('Device reported: Wrong format')
+	if (trimmed === 'Success' || trimmed === '') return trimmed
+
+	let parsed
+	try {
+		parsed = JSON.parse(trimmed)
+	} catch {
+		return trimmed
+	}
+
+	// The undocumented rejection envelope newer firmware uses in place of "Wrong format".
+	if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+		const cbStatus = parsed.cb_status
+		if (typeof cbStatus === 'string' && !/^(ok|success)$/i.test(cbStatus)) {
+			throw new Error(`Device reported: ${cbStatus}`)
+		}
+	}
+
+	return parsed
 }
 
 /** Minimal stand-in for ModuleInstance - the adapters only ever reach the device via the api. */
@@ -280,7 +312,7 @@ async function handleSend(request, response) {
 		return
 	}
 
-	lastRequest = null
+	requestLog = []
 
 	const result = {}
 	try {
@@ -289,15 +321,13 @@ async function handleSend(request, response) {
 		result.error = error.message
 	}
 
-	if (lastRequest) {
-		result.url = lastRequest.url
-		result.httpStatus = lastRequest.httpStatus
-		result.raw = lastRequest.raw
-	}
+	result.requests = requestLog
 
 	console.log(`\n  ${command.section}  ${command.name}`)
-	if (result.url) console.log(`  -> ${result.url}`)
-	if (result.raw !== undefined) console.log(`  <- ${result.httpStatus} ${JSON.stringify(result.raw)}`)
+	for (const entry of requestLog) {
+		console.log(`  -> ${entry.url}`)
+		if (entry.raw !== undefined) console.log(`  <- ${entry.httpStatus} ${JSON.stringify(entry.raw)}`)
+	}
 	if (result.error) console.log(`  !! ${result.error}`)
 
 	response.writeHead(200, { 'content-type': 'application/json' })
@@ -491,8 +521,11 @@ document.querySelectorAll('.card').forEach((card) => {
 			const data = await response.json()
 
 			const lines = []
-			if (data.url) lines.push('GET  ' + decodeURIComponent(data.url), '')
-			if (data.raw !== undefined) lines.push('<-   HTTP ' + data.httpStatus, JSON.stringify(data.raw))
+			for (const entry of data.requests ?? []) {
+				if (lines.length) lines.push('')
+				lines.push('GET  ' + decodeURIComponent(entry.url), '')
+				if (entry.raw !== undefined) lines.push('<-   HTTP ' + entry.httpStatus, JSON.stringify(entry.raw))
+			}
 			if (data.error) lines.push('', '!!   ' + data.error)
 			if (!lines.length) lines.push('(no request was made)')
 

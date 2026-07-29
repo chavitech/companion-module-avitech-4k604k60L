@@ -17,8 +17,9 @@ export interface SequoiaCapabilities {
  * One window's entry in a "Window Position and Size - Set" request (Table 1.3.2.2).
  *
  * The guide's `data` array is [x, y, w, h, z, aspect, fit, show], but `z` is deliberately absent
- * here: the guide states the Z-axis numbers 0~3 always correspond to win_id 1~4 in order and
- * "currently cannot be modify", so it's derived rather than accepted from the caller.
+ * here. It is not a value the caller gets to choose: the device's z-order turned out to be real
+ * state that the guide describes incorrectly, so `setWindowGeometry` reads it off the device and
+ * carries it through rather than deriving or accepting one. See that method for the measurements.
  */
 export interface WindowGeometry {
 	/** position_x, 0 to 3840 */
@@ -43,6 +44,62 @@ export interface WindowGeometry {
  * fixed to 1 throughout - the same way the 4K60L adapter fixes `port` on its K/M commands.
  */
 const WINDOW_COMMAND_PORT = 1
+
+/** Offset of the z value inside a Table 1.3.2.2 `data` array: [x, y, w, h, z, aspect, fit, show]. */
+const GEOMETRY_Z_INDEX = 4
+
+/**
+ * State that "Window Position and Size - Set" has to write but that the action deliberately does
+ * not expose, so it is carried over from the current device state rather than invented. See
+ * `setWindowGeometry` for why.
+ */
+interface PreservedGeometryState {
+	/** Current z value per window, indexed by `id - 1`. */
+	z: number[]
+	globalOption: unknown[]
+	defaultLayout: number
+	preset: number
+}
+
+/**
+ * Pulls the carry-through fields out of a Table 1.3.2.1 response.
+ *
+ * Deliberately strict: a field we cannot read is thrown on rather than defaulted, because the
+ * documented default is exactly the value that was found to be wrong on real hardware. Aborting the
+ * write is a smaller failure than silently resetting device state.
+ *
+ * Throws a plain `Error` rather than `AvitechApiError` on purpose - importing that would pull
+ * `avitech-api.js` (and through it `@companion-module/base`) into the adapter import chain, which
+ * `tools/bench.mjs` relies on staying free of runtime dependencies.
+ */
+function readPreservedGeometryState(response: AvitechResponse): PreservedGeometryState {
+	if (response === null || typeof response !== 'object' || Array.isArray(response)) {
+		throw new Error(`Expected an object from the window geometry Get, received: ${JSON.stringify(response)}`)
+	}
+
+	const { win, global_option: globalOption, default_layout: defaultLayout, preset } = response
+
+	if (!Array.isArray(win)) throw new Error('Window geometry response has no "win" array')
+	if (!Array.isArray(globalOption)) throw new Error('Window geometry response has no "global_option" array')
+	if (typeof defaultLayout !== 'number') throw new Error('Window geometry response has no "default_layout" number')
+	if (typeof preset !== 'number') throw new Error('Window geometry response has no "preset" number')
+
+	const z: number[] = []
+	for (const entry of win) {
+		if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+			throw new Error('Window geometry response contains a malformed "win" entry')
+		}
+
+		const { id, data } = entry as Record<string, unknown>
+		if (typeof id !== 'number' || !Array.isArray(data) || typeof data[GEOMETRY_Z_INDEX] !== 'number') {
+			throw new Error('Window geometry response contains a "win" entry with no id or z value')
+		}
+
+		z[id - 1] = data[GEOMETRY_Z_INDEX]
+	}
+
+	return { z, globalOption, defaultLayout, preset }
+}
 
 /**
  * Base class for a model-specific adapter. The abstract methods below (routing/audio) plus the
@@ -81,7 +138,8 @@ export abstract class SequoiaAdapter {
 	 *  "resolution":[3840,2160],"global_option":[0,0,0,1,0],"default_layout":0,"preset":0}
 	 * ```
 	 *
-	 * Two details contradict the guide and both matter to `setWindowGeometry`:
+	 * Two details contradict the guide, and both are why `setWindowGeometry` calls this before it
+	 * writes:
 	 *
 	 * - **z-order is not win_id order.** The guide states the z values 0~3 "correspond to the order
 	 *   from win_id 1 ~ win_id 4", but this unit reported 0, 2, 1, 3 for windows 1-4. z is real
@@ -90,44 +148,58 @@ export abstract class SequoiaAdapter {
 	 *   device reported [0,0,0,1,0]. Index 3 holds a non-default value in the field.
 	 *
 	 * `win_crop` and `virt_win` come back but appear nowhere in the guide, and the Set command has
-	 * no inputs corresponding to them.
+	 * no inputs corresponding to them. They were unaffected by a Set that omitted them, and
+	 * `virt_win` tracked position exactly, so it looks derived. Left alone.
 	 */
 	async getWindowGeometry(): Promise<AvitechResponse> {
 		return this.api.sendCommand('2060', { func: 'get', type: 'position', port: WINDOW_COMMAND_PORT })
 	}
 
 	/**
-	 * Table 1.3.2.2. Sets all four windows in one request - the guide gives no example of a
-	 * partial update, so the caller supplies the complete layout.
+	 * Table 1.3.2.2. Sets all four windows in one request - the guide gives no example of a partial
+	 * update, so the caller supplies the complete layout.
 	 *
-	 * `global_option`, `default_layout` and `preset` are hard-coded to the guide's instruction to
-	 * "leave them remain in 0 and do not change it".
+	 * Reads the current geometry first, which the guide gives no reason to do. Two of the fields
+	 * this command must write are ones the caller does not supply, and following the guide's
+	 * instructions for them was measured corrupting device state on a 4K60L (2026-07-29):
 	 *
-	 * KNOWN RISK, unresolved: the device does not agree with the guide on two of the values this
-	 * command writes blind (see `getWindowGeometry` for the captured response).
+	 * - **z.** The guide says z 0~3 tracks win_id order and "currently cannot be modify", implying
+	 *   it is safe to derive as `index`. It is neither. A unit sitting at z = 0,2,1,3 was sent
+	 *   0,1,2,3 and ended up at 1,2,0,3 - so the device acts on an incoming z, but not by taking
+	 *   the value given. Since the resulting z cannot be predicted, it can only be preserved.
+	 * - **`global_option`.** The guide says to leave it at 0 and not change it. The same unit
+	 *   reported [0,0,0,1,0], and writing the documented five zeros reset index 3 to 0.
 	 *
-	 * - z is derived here as `index`, i.e. 0,1,2,3, because the guide says z tracks win_id order and
-	 *   "currently cannot be modify". A real unit reported 0,2,1,3. If the device does honour an
-	 *   incoming z, this call silently restacks windows 2 and 3.
-	 * - `global_option` is sent as five zeros per the guide. A real unit reported [0,0,0,1,0], so
-	 *   this may be clobbering index 3.
+	 * `default_layout` and `preset` are carried through for the same reason, though both have only
+	 * ever been observed as 0. `resolution` comes from the caller: it is a real option on the
+	 * action, not opaque state.
 	 *
-	 * Both are only fixable by reading the current geometry first and preserving these fields, which
-	 * would make this command stateful. Left as-is deliberately pending a decision.
+	 * The extra round-trip is the cost of not corrupting state the module does not model. If the
+	 * read fails the write is abandoned rather than falling back to the documented defaults, since
+	 * those defaults are the known-bad values.
 	 */
 	async setWindowGeometry(windows: WindowGeometry[], resolution: [number, number]): Promise<void> {
+		const preserved = readPreservedGeometryState(await this.getWindowGeometry())
+
 		await this.api.sendCommand('2060', {
 			func: 'set',
 			type: 'position',
 			port: WINDOW_COMMAND_PORT,
-			win: windows.map((window, index) => ({
-				id: index + 1,
-				data: [window.x, window.y, window.w, window.h, index, window.aspect, window.fit, window.show],
-			})),
-			global_option: [0, 0, 0, 0, 0],
+			win: windows.map((window, index) => {
+				const z = preserved.z[index]
+				if (typeof z !== 'number') {
+					throw new Error(`Window geometry response had no z value for window ${index + 1}`)
+				}
+
+				return {
+					id: index + 1,
+					data: [window.x, window.y, window.w, window.h, z, window.aspect, window.fit, window.show],
+				}
+			}),
+			global_option: preserved.globalOption,
 			resolution,
-			default_layout: 0,
-			preset: 0,
+			default_layout: preserved.defaultLayout,
+			preset: preserved.preset,
 		})
 	}
 
