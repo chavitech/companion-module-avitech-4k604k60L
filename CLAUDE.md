@@ -1,8 +1,17 @@
 # Avitech Sequoia 4K60 / 4K60L — Companion module
 
 Bitfocus Companion connection module for the Avitech Sequoia 4K60 and 4K60L multiviewers.
-Manifest id `companion-module-avitech-sequoia4k60-sequoia4k60l`, runtime `node22`,
-entrypoint `dist/main.js`.
+Manifest id `avitech-sequoia4k60-sequoia4k60l`, runtime `node22`, entrypoint `dist/main.js`.
+
+**The manifest id is derived from the repository name and is not free-form.** Bitfocus CI
+(`bitfocus/actions/.github/workflows/module-checks.yaml`, the "Package module" job) computes
+`basename(repo)` with the `companion-module-` prefix stripped and requires `companion/manifest.json`'s
+`id` to equal it exactly — so repo `companion-module-avitech-sequoia4k60-sequoia4k60l` demands id
+`avitech-sequoia4k60-sequoia4k60l`. Note the id does **not** carry the `companion-module-` prefix;
+compare `companion-module-bmd-atem` → `bmd-atem`. If that job fails with "Module manifest.json id
+does not match github repository name", this is why, and the id is what moves — renaming the repo
+changes the id every published connection is keyed on. `legacyIds` exists to migrate a _published_
+id and is empty because this module has not shipped.
 
 ## Build and verify
 

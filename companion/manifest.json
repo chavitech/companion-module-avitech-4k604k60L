@@ -1,7 +1,7 @@
 {
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"type": "connection",
-	"id": "companion-module-avitech-sequoia4k60-sequoia4k60l",
+	"id": "avitech-sequoia4k60-sequoia4k60l",
 	"name": "Avitech 4K60 & 4K60L",
 	"shortname": "avitech-4k604k60L",
 	"description": "Companion Module for Avitech 4K60 & 4K60L",
