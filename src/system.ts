@@ -1,0 +1,155 @@
+import { splitRgb } from '@companion-module/base'
+import type { DropdownChoice } from '@companion-module/base'
+import type { DeviceColor } from './adapters/index.js'
+
+/**
+ * Option value lists and colour conversion for the "Commands for Controlling System" family
+ * (reference guide section 1.3.1). These apply to both the 4K60 and the 4K60L - the guide documents
+ * the section once for "Sequoia 4K60/4K60L" rather than per model.
+ *
+ * This is the section 1.3.1 counterpart to `windows.ts`. Unlike that file it holds a value import
+ * from `@companion-module/base` (`splitRgb`), which is safe here only because nothing in the
+ * adapter import chain imports this module - `tools/bench.mjs` loads `dist/adapters/index.js` and
+ * depends on that chain staying free of runtime dependencies on the Companion package. The types
+ * the adapters need (`DeviceColor`, `OsdSettings`) are declared in `base.ts` and flow outward, not
+ * inward. Keep it that way.
+ */
+
+/** Table 1.3.1.5. The three factory window arrangements. */
+export const DEFAULT_LAYOUT_CHOICES: DropdownChoice[] = [
+	{ id: 1, label: 'Quad (2x2)' },
+	{ id: 2, label: '3 small + 1 large' },
+	{ id: 3, label: '1 large + 3 small' },
+]
+
+/** Table 1.3.1.6. The five user icon presets from the web GUI's Layout & Routing page. */
+export const USER_ICON_PRESET_CHOICES: DropdownChoice[] = [1, 2, 3, 4, 5].map((id) => ({
+	id,
+	label: `User icon preset ${id}`,
+}))
+
+/** Table 1.3.1.15. Master OSD visibility - label, border and audio tally together. */
+export const OSD_ENABLED_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Hide all OSD' },
+	{ id: 1, label: 'Show all OSD' },
+]
+
+/** Tables 1.3.1.16/1.3.1.17. Border width in pixels; 0 hides the border. */
+export const BORDER_WIDTH_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Off (no border)' },
+	{ id: 2, label: '2 pixels' },
+	{ id: 4, label: '4 pixels' },
+	{ id: 6, label: '6 pixels' },
+]
+
+/** Tables 1.3.1.16/1.3.1.18. Whether the label sits over the image or outside it. */
+export const LABEL_OVERLAY_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Outside the image' },
+	{ id: 1, label: 'Overlaid on the image' },
+]
+
+/** Table 1.3.1.16. Label visibility. `auto_hide_label` only bites while this is 1. */
+export const SHOW_LABEL_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Hide labels' },
+	{ id: 1, label: 'Show labels' },
+]
+
+/** Table 1.3.1.16. */
+export const AUTO_HIDE_LABEL_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Always visible' },
+	{ id: 1, label: 'Auto-hide' },
+]
+
+/**
+ * Table 1.3.1.16. Whether label text inherits the background's transparency or stays solid.
+ *
+ * The guide's wording is `0 (transparent along with label background), 1 (non)` - "non" being all
+ * it says about value 1.
+ */
+export const LABEL_TEXT_TRANSPARENCY_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Follow label background transparency' },
+	{ id: 1, label: 'Always opaque' },
+]
+
+/** Tables 1.3.1.16/1.3.1.19/1.3.1.20. HDMI embedded audio switch tally. */
+export const SHOW_TALLY_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Hide audio tally' },
+	{ id: 1, label: 'Show audio tally' },
+]
+
+/** Table 1.3.1.21. */
+export const ACTIVE_BORDER_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Off' },
+	{ id: 1, label: 'On' },
+]
+
+/** Table 1.3.1.22. Fan failure and over-temperature alerts. */
+export const ALERT_DISPLAY_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Off' },
+	{ id: 1, label: 'On' },
+]
+
+/**
+ * Table 1.3.1.23, and the one place in this module where the wire value reads backwards.
+ *
+ * The guide defines `enable = 0 (enable power saving mode)` / `1 (disable power saving mode)`, so
+ * these labels are deliberately written in terms of the resulting behaviour rather than echoing the
+ * key name. Do not "fix" the apparent inversion.
+ */
+export const POWER_SAVING_CHOICES: DropdownChoice[] = [
+	{ id: 0, label: 'Enable power saving' },
+	{ id: 1, label: 'Disable power saving' },
+]
+
+/** Table 1.3.1.25. One of the module's only string-valued parameters. */
+export const MOUSE_MODE_CHOICES: DropdownChoice[] = [
+	{ id: 'right', label: 'Right-handed' },
+	{ id: 'left', label: 'Left-handed' },
+]
+
+/**
+ * Power saving (Table 1.3.1.23) is the only section 1.3.1 command addressing an output port, and
+ * the only one accepting port 0 to mean "every monitor at once".
+ */
+export function PowerSavingPortChoices(maxPorts: number): DropdownChoice[] {
+	return [
+		{ id: 0, label: 'All monitors' },
+		...Array.from({ length: maxPorts }, (_, i) => ({ id: i + 1, label: `HDMI OUT ${i + 1}` })),
+	]
+}
+
+/**
+ * A Companion colour picker value, as stored in the action's options.
+ *
+ * Typed as `string | number` rather than just `string` even though every picker below sets
+ * `returnType: 'string'`: a config saved before that was set, or a Companion build that ignores it,
+ * yields the packed number instead. `splitRgb` accepts both, so accepting both costs nothing.
+ */
+export type ColorOptionValue = string | number
+
+/**
+ * Converts a picker value to the device's `[R, G, B, 255]` form, for the OSD colours whose fourth
+ * component the guide documents as "255 (fixed)" - tally, border and popup menu colours.
+ *
+ * Any alpha on the incoming value is discarded, which is why the pickers feeding this do not set
+ * `enableAlpha`: offering a slider whose value is thrown away would be worse than not offering one.
+ */
+export function toFixedColor(value: ColorOptionValue): DeviceColor {
+	const { r, g, b } = splitRgb(value)
+
+	return [r, g, b, 255]
+}
+
+/**
+ * Converts a picker value to the device's `[R, G, B, transparency]` form, for the label font and
+ * background colours - the two whose fourth component the guide documents as a
+ * "transparency level (0-255)".
+ *
+ * `splitRgb` reports alpha as 0.0-1.0 and defaults it to 1 when the value carries none, so a colour
+ * picked without touching the alpha slider becomes 255 (fully opaque).
+ */
+export function toTransparencyColor(value: ColorOptionValue): DeviceColor {
+	const { r, g, b, a } = splitRgb(value)
+
+	return [r, g, b, Math.round((a ?? 1) * 255)]
+}

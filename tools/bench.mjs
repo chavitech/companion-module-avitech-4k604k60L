@@ -178,12 +178,354 @@ const GEOMETRY_DEFAULTS = [
 	{ x: 1920, y: 1080, w: 1920, h: 1080 },
 ]
 
+// --- Section 1.3.1 choice lists ---------------------------------------------------------------
+// Deliberately spelled out here rather than imported from `src/system.ts`. That module holds a
+// runtime import of `@companion-module/base` for its colour helpers, and pulling it in would put
+// the very dependency the bench exists to avoid back into this process. These lists are small and
+// the duplication is visible; the adapter calls below are still the real ones.
+
+const MODE_CHOICES_1_3_1 = {
+	defaultLayout: [
+		{ value: 1, label: 'Quad (2x2)' },
+		{ value: 2, label: '3 small + 1 large' },
+		{ value: 3, label: '1 large + 3 small' },
+	],
+	userIconPreset: [1, 2, 3, 4, 5].map((value) => ({ value, label: `User icon preset ${value}` })),
+	osdEnabled: [
+		{ value: 0, label: 'Hide all OSD' },
+		{ value: 1, label: 'Show all OSD' },
+	],
+	borderWidth: [
+		{ value: 0, label: 'Off' },
+		{ value: 2, label: '2 px' },
+		{ value: 4, label: '4 px' },
+		{ value: 6, label: '6 px' },
+	],
+	labelOverlay: [
+		{ value: 0, label: 'Outside the image' },
+		{ value: 1, label: 'Overlaid on the image' },
+	],
+	onOff: [
+		{ value: 0, label: 'Off' },
+		{ value: 1, label: 'On' },
+	],
+	// Table 1.3.1.23 defines this backwards on purpose: 0 turns power saving ON.
+	powerSaving: [
+		{ value: 0, label: 'Enable power saving' },
+		{ value: 1, label: 'Disable power saving' },
+	],
+	mouseMode: [
+		{ value: 'right', label: 'Right-handed' },
+		{ value: 'left', label: 'Left-handed' },
+	],
+}
+
+const PORT_CHOICES_ALL = [
+	{ value: 0, label: 'All monitors' },
+	...[1, 2, 3, 4, 5].map((value) => ({ value, label: `HDMI OUT ${value}` })),
+]
+
 /**
- * Declarative so that extending the bench to section 1.3.1 (or to the already-implemented 1.3.3 -
- * 1.3.5 commands) is a data change rather than a rewrite. `run` receives the form values keyed by
- * field id and calls straight through to the adapter.
+ * Parses an "R,G,B" or "R,G,B,A" bench text field into the device's `[R, G, B, A]` form.
+ *
+ * The bench has no colour picker widget, so colours are typed. `fallbackAlpha` is 255 for the
+ * colours the guide fixes at 255, and is what a three-component value gets.
+ */
+function parseColor(value, fallbackAlpha = 255) {
+	const parts = String(value)
+		.split(',')
+		.map((part) => Number(part.trim()))
+
+	if (parts.length < 3 || parts.length > 4 || parts.some((part) => !Number.isFinite(part))) {
+		throw new Error(`Expected a colour as "R,G,B" or "R,G,B,A", received: ${value}`)
+	}
+
+	return [parts[0], parts[1], parts[2], parts.length === 4 ? parts[3] : fallbackAlpha]
+}
+
+/**
+ * Declarative so that extending the bench to another guide section (or to the already-implemented
+ * 1.3.3 - 1.3.5 commands) is a data change rather than a rewrite. `run` receives the form values
+ * keyed by field id and calls straight through to the adapter.
  */
 const COMMANDS = [
+	{
+		id: 'get_firmware_version',
+		section: '1.3.1.1',
+		name: 'Firmware Version — Get',
+		note: 'Screenshot-only response in the guide (Figure 1.3.1.1). Whatever comes back here is the source of truth.',
+		fields: [],
+		run: () => adapter.getFirmwareVersion(),
+	},
+	{
+		id: 'get_signal_type',
+		section: '1.3.1.2',
+		name: 'Signal Type — Get',
+		note: 'Per-window 0 (no video) / 1 (video). The one 1.3.1 read worth driving feedbacks off, so its exact shape matters.',
+		fields: [],
+		run: () => adapter.getSignalType(),
+	},
+	{
+		id: 'get_network_info',
+		section: '1.3.1.3',
+		name: 'Network — Get',
+		note: 'Reports every Sequoia on the same network, not only this one. Worth checking how a daisy chain appears here.',
+		fields: [],
+		run: () => adapter.getNetworkInfo(),
+	},
+	{
+		id: 'set_output_resolution',
+		section: '1.3.1.4',
+		name: 'Output Resolution — Set',
+		note: 'Also documented as 1.3.4.9/1.3.4.10 and in 1.3.5. Port 5 exists only on the 4K60. Mode 0 is auto-detect from EDID.',
+		fields: [
+			{ id: 'port', label: 'Output Port', type: 'number', default: 1 },
+			{ id: 'mode', label: 'Resolution Mode', type: 'number', default: 0 },
+		],
+		run: (values) => adapter.setOutputResolution(values.port, values.mode),
+	},
+	{
+		id: 'load_default_layout',
+		section: '1.3.1.5',
+		name: 'Default Preset — Load',
+		note: 'Rearranges the windows to a factory layout. Does not erase anything, despite the name.',
+		fields: [{ id: 'layout', label: 'Layout', type: 'select', choices: MODE_CHOICES_1_3_1.defaultLayout, default: 1 }],
+		run: (values) => adapter.loadDefaultLayout(values.layout),
+	},
+	{
+		id: 'load_user_icon_preset',
+		section: '1.3.1.6',
+		name: 'User Icon Preset — Load',
+		note: 'Presets 1-5 from the web GUI. The module omits the guide’s optional "response" key; this does too.',
+		fields: [{ id: 'preset', label: 'Preset', type: 'select', choices: MODE_CHOICES_1_3_1.userIconPreset, default: 1 }],
+		run: (values) => adapter.loadPreset(values.preset),
+	},
+	{
+		id: 'load_latest_preset',
+		section: '1.3.1.10',
+		name: 'Latest Display Preset — Load',
+		note: 'Same request as 1.3.1.6 with preset_num 15. Loads the layout last stored with Save Latest.',
+		fields: [],
+		run: () => adapter.loadLatestPreset(),
+	},
+	{
+		id: 'load_custom_preset',
+		section: '1.3.1.7',
+		name: 'Custom Preset — Load',
+		note: 'Run the file list below first to get a name that actually exists.',
+		fields: [{ id: 'name', label: 'Preset Filename', type: 'text', default: '' }],
+		run: (values) => adapter.loadCustomPreset(values.name),
+	},
+	{
+		id: 'list_custom_presets',
+		section: '1.3.1.8',
+		name: 'Custom Preset File List — Get',
+		note: 'Screenshot-only response in the guide (Figure 1.3.1.7).',
+		fields: [],
+		run: () => adapter.listCustomPresets(),
+	},
+	{
+		id: 'delete_custom_preset',
+		section: '1.3.1.9',
+		name: 'Custom Preset — Delete',
+		warn: 'Destructive. Permanently deletes the named preset from the device. Check the spelling before sending.',
+		fields: [{ id: 'name', label: 'Preset Filename', type: 'text', default: '' }],
+		run: (values) => adapter.deleteCustomPreset(values.name),
+	},
+	{
+		id: 'reset_factory_defaults',
+		section: '1.3.1.11',
+		name: 'Reset Factory Defaults',
+		warn: 'Destructive. Resets the unit and erases EVERY custom preset in its flash memory. It applies on the next reboot, not on send, so a unit that has been sent this keeps working normally until it is power-cycled — do not leave one in that state for someone else to find.',
+		fields: [],
+		run: () => adapter.resetFactoryDefaults(),
+	},
+	{
+		id: 'set_fading_level',
+		section: '1.3.1.12',
+		name: 'Fading Level (Speed) — Set',
+		note: 'Only affects source switching in fullscreen mode. 0 = off, 1 = fastest, 255 = slowest.',
+		fields: [{ id: 'fading_time', label: 'Fade Speed', type: 'number', default: 0 }],
+		run: (values) => adapter.setFadingLevel(values.fading_time),
+	},
+	{
+		id: 'set_km_control',
+		section: '1.3.1.13',
+		name: 'K/M Control — Set',
+		note: 'Also documented as 1.3.4.6 and 1.3.5.3. 0 = Host mode; 1-4 standalone, 1-16 across a chain.',
+		fields: [{ id: 'winid', label: 'Window ID', type: 'number', default: 0 }],
+		run: (values) => adapter.setKmControl(values.winid),
+	},
+	{
+		id: 'get_osd_info',
+		section: '1.3.1.14',
+		name: 'OSD Information — Get',
+		note: 'The read side of every OSD setter below. Capture this before and after a set to see which keys actually moved.',
+		fields: [],
+		run: () => adapter.getOsdInfo(),
+	},
+	{
+		id: 'set_osd_enabled',
+		section: '1.3.1.15',
+		name: 'OSD Show/Hide — Set',
+		note: 'The odd one out: cmd=Info, not 2060, and the payload key is "en", not "enable". Worth confirming on hardware.',
+		fields: [{ id: 'enabled', label: 'OSD', type: 'select', choices: MODE_CHOICES_1_3_1.osdEnabled, default: 1 }],
+		run: (values) => adapter.setOsdEnabled(values.enabled),
+	},
+	{
+		id: 'set_window_border',
+		section: '1.3.1.17',
+		name: 'Window Border — Set',
+		note: 'One of six tables (1.3.1.16-1.3.1.21) that are the same 2060/set/osd request with different data keys.',
+		fields: [
+			{
+				id: 'border_width',
+				label: 'Border Width',
+				type: 'select',
+				choices: MODE_CHOICES_1_3_1.borderWidth,
+				default: 2,
+			},
+			{ id: 'border_color', label: 'Border Colour (R,G,B)', type: 'text', default: '255,255,255' },
+		],
+		run: (values) =>
+			adapter.setOsd({ border_width: values.border_width, border_color: parseColor(values.border_color) }),
+	},
+	{
+		id: 'set_window_label_color',
+		section: '1.3.1.18',
+		name: 'Window Label Color — Set',
+		note: 'The label colours are the only ones whose 4th component is a transparency level rather than a fixed 255.',
+		fields: [
+			{ id: 'label_font_color', label: 'Font Colour (R,G,B,A)', type: 'text', default: '255,255,255,255' },
+			{ id: 'label_back_color', label: 'Background Colour (R,G,B,A)', type: 'text', default: '0,0,0,255' },
+			{
+				id: 'label_overlay',
+				label: 'Label Position',
+				type: 'select',
+				choices: MODE_CHOICES_1_3_1.labelOverlay,
+				default: 0,
+			},
+		],
+		run: (values) =>
+			adapter.setOsd({
+				label_font_color: parseColor(values.label_font_color),
+				label_back_color: parseColor(values.label_back_color),
+				label_overlay: values.label_overlay,
+			}),
+	},
+	{
+		id: 'set_osd_label_display',
+		section: '1.3.1.16',
+		name: 'OSD — Set (label visibility keys)',
+		note: 'The label keys of 1.3.1.16 that no task-shaped table covers. Auto-hide only bites while Show Label is on.',
+		fields: [
+			{ id: 'show_label', label: 'Labels', type: 'select', choices: MODE_CHOICES_1_3_1.onOff, default: 1 },
+			{ id: 'auto_hide_label', label: 'Auto-hide', type: 'select', choices: MODE_CHOICES_1_3_1.onOff, default: 0 },
+			{
+				id: 'label_text_transparency',
+				label: 'Text Transparency',
+				type: 'select',
+				choices: MODE_CHOICES_1_3_1.onOff,
+				default: 0,
+			},
+		],
+		run: (values) =>
+			adapter.setOsd({
+				show_label: values.show_label,
+				auto_hide_label: values.auto_hide_label,
+				label_text_transparency: values.label_text_transparency,
+			}),
+	},
+	{
+		id: 'set_audio_tally_color',
+		section: '1.3.1.19',
+		name: 'Audio Tally Color — Set',
+		note: 'Tally 1 is the HDMI embedded audio switch indicator.',
+		fields: [
+			{ id: 'tally1_on_color', label: 'On Colour (R,G,B)', type: 'text', default: '0,255,0' },
+			{ id: 'tally1_off_color', label: 'Off Colour (R,G,B)', type: 'text', default: '64,64,64' },
+		],
+		run: (values) =>
+			adapter.setOsd({
+				tally1_on_color: parseColor(values.tally1_on_color),
+				tally1_off_color: parseColor(values.tally1_off_color),
+			}),
+	},
+	{
+		id: 'set_audio_tally_show',
+		section: '1.3.1.20',
+		name: 'Audio Tally Show/Hide — Set',
+		note: 'Only visible while the OSD as a whole is on.',
+		fields: [
+			{ id: 'show_tally1', label: 'Audio Tally', type: 'select', choices: MODE_CHOICES_1_3_1.onOff, default: 1 },
+		],
+		run: (values) => adapter.setOsd({ show_tally1: values.show_tally1 }),
+	},
+	{
+		id: 'set_popup_menu_colors',
+		section: '1.3.1.16',
+		name: 'OSD — Set (popup menu colours)',
+		note: 'The last three keys of 1.3.1.16. No table of their own, and no description of where the popup menu appears.',
+		fields: [
+			{ id: 'popupmenu_active_color', label: 'Active (R,G,B)', type: 'text', default: '255,255,255' },
+			{ id: 'popupmenu_available_color', label: 'Available (R,G,B)', type: 'text', default: '192,192,192' },
+			{ id: 'popupmenu_disable_color', label: 'Disabled (R,G,B)', type: 'text', default: '96,96,96' },
+		],
+		run: (values) =>
+			adapter.setOsd({
+				popupmenu_active_color: parseColor(values.popupmenu_active_color),
+				popupmenu_available_color: parseColor(values.popupmenu_available_color),
+				popupmenu_disable_color: parseColor(values.popupmenu_disable_color),
+			}),
+	},
+	{
+		id: 'set_active_border',
+		section: '1.3.1.21',
+		name: 'Active Window Border Show/Hide — Set',
+		note: 'Sent through the same osd data object, but active_border is absent from 1.3.1.16’s own key list.',
+		fields: [
+			{ id: 'active_border', label: 'Active Border', type: 'select', choices: MODE_CHOICES_1_3_1.onOff, default: 1 },
+		],
+		run: (values) => adapter.setOsd({ active_border: values.active_border }),
+	},
+	{
+		id: 'set_alert_display',
+		section: '1.3.1.22',
+		name: 'Alert Display — Set',
+		note: 'Fan failure and temperature alerts. The on/off value rides in "mode"; "sob_alarm" is the type, not the key.',
+		fields: [{ id: 'mode', label: 'Alerts', type: 'select', choices: MODE_CHOICES_1_3_1.onOff, default: 1 }],
+		run: (values) => adapter.setAlertDisplay(values.mode),
+	},
+	{
+		id: 'set_power_saving',
+		section: '1.3.1.23',
+		name: 'Power Saving Mode on Monitor — Set',
+		note: 'Reads backwards by design: enable=0 turns power saving ON. Port 0 targets every monitor; port 5 is 4K60-only.',
+		fields: [
+			{ id: 'port', label: 'Monitor', type: 'select', choices: PORT_CHOICES_ALL, default: 0 },
+			{ id: 'enable', label: 'Power Saving', type: 'select', choices: MODE_CHOICES_1_3_1.powerSaving, default: 1 },
+		],
+		run: (values) => adapter.setPowerSavingMode(values.port, values.enable),
+	},
+	{
+		id: 'set_km_idle_detection',
+		section: '1.3.1.24',
+		name: 'Keyboard/Mouse Idle Detection — Set',
+		note: 'The guide documents no range at all for idle_time. Seconds is inferred from its one example (120 = "2 minutes"). Whether 0 disables the lock is unknown — a good thing to establish here.',
+		fields: [{ id: 'idle_time', label: 'Idle Time (seconds)', type: 'number', default: 120 }],
+		run: (values) => adapter.setKmIdleDetection(values.idle_time),
+	},
+	{
+		id: 'set_mouse',
+		section: '1.3.1.25',
+		name: 'Mouse — Set',
+		note: 'One of the few string-valued parameters in the API. The guide’s example description contradicts its own value.',
+		fields: [
+			{ id: 'mode', label: 'Handedness', type: 'select', choices: MODE_CHOICES_1_3_1.mouseMode, default: 'right' },
+			{ id: 'speed', label: 'Pointer Speed', type: 'number', default: 7 },
+		],
+		run: (values) => adapter.setMouse(values.mode, values.speed),
+	},
 	{
 		id: 'get_window_geometry',
 		section: '1.3.2.1',
@@ -419,8 +761,12 @@ function renderCard(command) {
 	// that undocumented behaviour can still be probed. A command with a known harmful effect there
 	// needs saying out loud instead.
 	const isDaisyChain = config.mode === 'sequoia-4k60l-daisy-chain'
-	const warning =
+	const daisyWarning =
 		isDaisyChain && command.warnInDaisyChain ? `<p class="warn">${escapeHtml(command.warnInDaisyChain)}</p>` : ''
+
+	// `warn` is unconditional, for commands that are dangerous in every mode rather than only in a
+	// daisy chain - the section 1.3.1 commands that erase device state.
+	const warning = command.warn ? `<p class="warn">${escapeHtml(command.warn)}</p>` : ''
 
 	return `
 <section class="card" data-command="${command.id}">
@@ -429,6 +775,7 @@ function renderCard(command) {
 		<h2>${escapeHtml(command.name)}</h2>
 	</header>
 	${warning}
+	${daisyWarning}
 	${note}
 	${fields}
 	<button type="button">Send</button>

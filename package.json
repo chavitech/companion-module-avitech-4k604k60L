@@ -1,6 +1,6 @@
 {
 	"name": "companion-module-avitech-4k604k60L",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"main": "dist/main.js",
 	"type": "module",
 	"scripts": {
