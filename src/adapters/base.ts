@@ -70,7 +70,28 @@ export abstract class SequoiaAdapter {
 	// for a subclass to branch on. Section 1.3.5 does not list any of these, so `actions.ts` does
 	// not register them for daisy-chain mode.
 
-	/** Table 1.3.2.1. Response shape is only shown as a screenshot in the guide (Figure 1.3.2.1). */
+	/**
+	 * Table 1.3.2.1. The guide shows this response only as a screenshot (Figure 1.3.2.1), so the
+	 * shape below - captured from a 4K60L on 2026-07-29 - is the real source of truth:
+	 *
+	 * ```json
+	 * {"port":1,
+	 *  "win":[{"id":1,"data":[0,0,1920,1080,0,1,1,1],
+	 *          "win_crop":[0,0,10000,10000],"virt_win":[0,0,1920,1080]}, ... x4],
+	 *  "resolution":[3840,2160],"global_option":[0,0,0,1,0],"default_layout":0,"preset":0}
+	 * ```
+	 *
+	 * Two details contradict the guide and both matter to `setWindowGeometry`:
+	 *
+	 * - **z-order is not win_id order.** The guide states the z values 0~3 "correspond to the order
+	 *   from win_id 1 ~ win_id 4", but this unit reported 0, 2, 1, 3 for windows 1-4. z is real
+	 *   independent state, not a restatement of the id.
+	 * - **`global_option` is not all zeros.** The guide says to leave it at 0 and not change it; the
+	 *   device reported [0,0,0,1,0]. Index 3 holds a non-default value in the field.
+	 *
+	 * `win_crop` and `virt_win` come back but appear nowhere in the guide, and the Set command has
+	 * no inputs corresponding to them.
+	 */
 	async getWindowGeometry(): Promise<AvitechResponse> {
 		return this.api.sendCommand('2060', { func: 'get', type: 'position', port: WINDOW_COMMAND_PORT })
 	}
@@ -81,6 +102,18 @@ export abstract class SequoiaAdapter {
 	 *
 	 * `global_option`, `default_layout` and `preset` are hard-coded to the guide's instruction to
 	 * "leave them remain in 0 and do not change it".
+	 *
+	 * KNOWN RISK, unresolved: the device does not agree with the guide on two of the values this
+	 * command writes blind (see `getWindowGeometry` for the captured response).
+	 *
+	 * - z is derived here as `index`, i.e. 0,1,2,3, because the guide says z tracks win_id order and
+	 *   "currently cannot be modify". A real unit reported 0,2,1,3. If the device does honour an
+	 *   incoming z, this call silently restacks windows 2 and 3.
+	 * - `global_option` is sent as five zeros per the guide. A real unit reported [0,0,0,1,0], so
+	 *   this may be clobbering index 3.
+	 *
+	 * Both are only fixable by reading the current geometry first and preserving these fields, which
+	 * would make this command stateful. Left as-is deliberately pending a decision.
 	 */
 	async setWindowGeometry(windows: WindowGeometry[], resolution: [number, number]): Promise<void> {
 		await this.api.sendCommand('2060', {
@@ -98,7 +131,21 @@ export abstract class SequoiaAdapter {
 		})
 	}
 
-	/** Table 1.3.2.3. Response shape is only shown as a screenshot in the guide (Figure 1.3.2.2). */
+	/**
+	 * Table 1.3.2.3. Response captured from a 4K60L on 2026-07-29; the guide shows only a
+	 * screenshot (Figure 1.3.2.2):
+	 *
+	 * ```json
+	 * {"sib_label":["Source 1","Source 2","Source 3","Source 4",
+	 *               "Source 64","Source 65", ... ,"Source 79"]}
+	 * ```
+	 *
+	 * Twenty entries, not four. The key name ("sib", presumably sibling) and the 4 -> 64 jump in the
+	 * default numbering both suggest the array spans a full daisy chain rather than one unit's four
+	 * inputs. On a non-chained unit the first four entries are the ones `setWindowLabel` ports 1-4
+	 * address; what the remaining sixteen refer to is not established. Confirm against a real chain
+	 * before driving variables off any index past 3.
+	 */
 	async getWindowLabels(): Promise<AvitechResponse> {
 		return this.api.sendCommand('Info', { func: 'get', type: 'label' })
 	}

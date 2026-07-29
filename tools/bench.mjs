@@ -214,6 +214,8 @@ const COMMANDS = [
 		section: '1.3.2.4',
 		name: 'Window Label Text — Set',
 		note: 'Excluded characters: < > ! @ # $ % ^ & * " \' ` / \\ , . : ; ? =',
+		warnInDaisyChain:
+			'Do not run this against a daisy-chained unit. It returns Success, does not set the label, and leaves the unit unable to edit labels from its own GUI afterwards.',
 		fields: [
 			{ id: 'port', label: 'Input Port', type: 'select', choices: WINDOW_CHOICES, default: 1 },
 			{ id: 'label', label: 'Label', type: 'text', default: 'Bench Test' },
@@ -380,12 +382,20 @@ function renderCard(command) {
 		? `<div class="fields">${command.fields.map(renderField).join('')}</div>`
 		: '<p class="note">No parameters.</p>'
 
+	// Companion gates section 1.3.2 out of daisy-chain mode; the bench deliberately does not, so
+	// that undocumented behaviour can still be probed. A command with a known harmful effect there
+	// needs saying out loud instead.
+	const isDaisyChain = config.mode === 'sequoia-4k60l-daisy-chain'
+	const warning =
+		isDaisyChain && command.warnInDaisyChain ? `<p class="warn">${escapeHtml(command.warnInDaisyChain)}</p>` : ''
+
 	return `
 <section class="card" data-command="${command.id}">
 	<header>
 		<span class="tag">${escapeHtml(command.section)}</span>
 		<h2>${escapeHtml(command.name)}</h2>
 	</header>
+	${warning}
 	${note}
 	${fields}
 	<button type="button">Send</button>
@@ -418,6 +428,11 @@ function renderPage() {
 	.tag { font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--muted);
 		border:1px solid var(--line); border-radius:4px; padding:.25rem .4rem; }
 	.note { color:var(--muted); font-size:.85rem; margin:.6rem 0 0; }
+	.warn { margin:.7rem 0 0; padding:.55rem .7rem; border:1px solid var(--bad); border-left-width:3px;
+		border-radius:6px; color:var(--bad); font-size:.85rem; }
+	.banner { margin:0 0 1.5rem; padding:.8rem 1rem; border:1px solid var(--bad); border-left-width:3px;
+		border-radius:8px; background:var(--card); font-size:.88rem; }
+	.banner strong { color:var(--bad); }
 	.fields { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5rem, 1fr)); gap:.6rem; margin:.9rem 0 0; }
 	.field { display:flex; flex-direction:column; gap:.25rem; }
 	label { font-size:.75rem; color:var(--muted); }
@@ -441,6 +456,14 @@ function renderPage() {
 		device <code>${escapeHtml(config.host)}${config.port !== 80 ? `:${config.port}` : ''}</code> &middot;
 		mode <code>${escapeHtml(config.mode)}</code>
 	</p>
+	${
+		config.mode === 'sequoia-4k60l-daisy-chain'
+			? `<div class="banner"><strong>Daisy-chain mode.</strong> Companion does not expose section 1.3.2
+			   on a chained unit; this bench does not gate by mode, so every command below will still fire.
+			   Most of them return <code>Success</code> and have no effect &mdash; a false positive the module
+			   cannot detect. Treat any result here as unverified unless you confirm it on the hardware.</div>`
+			: ''
+	}
 	${COMMANDS.map(renderCard).join('')}
 </main>
 <script>

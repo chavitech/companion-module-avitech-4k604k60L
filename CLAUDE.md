@@ -88,9 +88,19 @@ intersection of the two machines, not the union.
 on a unit in daisy-chain mode. A command documented elsewhere is not registered for that mode even
 when it is otherwise model-agnostic — hence `actions.ts` gates all seven §1.3.2 actions behind
 `!isDaisyChain`, and `Sequoia4K60LAdapter.setLabel()` (§1.3.5, sends `daisy: 1`) stays a separate
-method from `SequoiaAdapter.setWindowLabel()` (§1.3.2, no `daisy` key) despite the overlap. If the
-bench ever shows the general commands working undocumented in daisy chain, that's a bonus to
-consolidate later — not an assumption to build on now.
+method from `SequoiaAdapter.setWindowLabel()` (§1.3.2, no `daisy` key) despite the overlap.
+
+Bench-tested against a daisy-chained 4K60L on 2026-07-29, so this gating is now empirically
+justified rather than precautionary:
+
+- **Almost every §1.3.2 command returns `Success` and then does nothing.** The device does not
+  report the rejection, so the module _cannot_ detect this failure — nothing in `parseResponse`
+  can tell it apart from a real success. Treat a §1.3.2 command aimed at a chained unit as a
+  false positive, never as working. Whether that's worth chasing is a firmware question.
+- **Never send Window Label Text — Set (§1.3.2.4) to a daisy-chained unit.** It doesn't set the
+  label, and afterwards the unit's own GUI can no longer edit labels manually. This is the one
+  §1.3.2 command with a known harmful effect in this mode. Companion won't offer it there, but
+  `tools/bench.mjs` does not gate by mode and will happily fire it.
 
 `ModuleInstance.adapter` is rebuilt in both `init()` and `configUpdated()`, because changing the
 configured mode must swap the adapter and rebuild the action list.
