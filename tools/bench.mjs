@@ -344,7 +344,10 @@ const server = createServer((request, response) => {
 	}
 
 	if (request.url === '/' || request.url === '/index.html') {
-		response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+		// no-store because the page and the /send payload shape change together. A cached page
+		// against a newer server silently renders nothing, which looks like a device fault rather
+		// than a stale tab.
+		response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
 		response.end(renderPage())
 		return
 	}
