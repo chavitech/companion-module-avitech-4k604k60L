@@ -3,7 +3,7 @@
 	"type": "connection",
 	"id": "avitech-sequoia4k60-sequoia4k60l",
 	"name": "Avitech 4K60 & 4K60L",
-	"shortname": "avitech-4k604k60L",
+	"shortname": "sequoia",
 	"description": "Companion Module for Avitech 4K60 & 4K60L",
 	"version": "0.2.0",
 	"license": "MIT",

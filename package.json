@@ -1,5 +1,5 @@
 {
-	"name": "companion-module-avitech-4k604k60L",
+	"name": "avitech-sequoia4k60-sequoia4k60l",
 	"version": "0.2.0",
 	"main": "dist/main.js",
 	"type": "module",
@@ -17,7 +17,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/chavitech/companion-module-avitech-4k604k60L.git"
+		"url": "git+https://github.com/bitfocus/companion-module-avitech-sequoia4k60-sequoia4k60l.git"
 	},
 	"engines": {
 		"node": "^22.20",
