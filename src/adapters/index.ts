@@ -5,7 +5,13 @@ import { SequoiaAdapter } from './base.js'
 import { Sequoia4K60Adapter } from './sequoia-4k60.js'
 import { Sequoia4K60LAdapter, type Sequoia4K60LMode } from './sequoia-4k60l.js'
 
-export { SequoiaAdapter, type SequoiaCapabilities, type WindowGeometry } from './base.js'
+export {
+	SequoiaAdapter,
+	type DeviceColor,
+	type OsdSettings,
+	type SequoiaCapabilities,
+	type WindowGeometry,
+} from './base.js'
 export { Sequoia4K60Adapter } from './sequoia-4k60.js'
 export { Sequoia4K60LAdapter, type Sequoia4K60LMode } from './sequoia-4k60l.js'
 

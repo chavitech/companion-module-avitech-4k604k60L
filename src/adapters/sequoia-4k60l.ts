@@ -96,22 +96,11 @@ export class Sequoia4K60LAdapter extends SequoiaAdapter {
 		await this.api.sendCommand('Ext', { func: 'set', type: 'PowerOn_KMmode', port: 1, mode })
 	}
 
-	/**
-	 * Table 1.3.4.6 (quad-bypass) / Table 1.3.5.3 (daisy-chain) - identical request shape in both
-	 * places, `port` fixed to 1. Only the valid `winid` range differs (0-4 vs 0-16), which is
-	 * enforced by the calling action's field bounds, not here.
-	 */
-	async setKmControl(winid: number): Promise<void> {
-		await this.api.sendCommand('Ext', { func: 'set', type: 'enter_remote', port: 1, winid })
-	}
-
-	/**
-	 * Tables 1.3.4.9/1.3.4.10 and 1.3.5's Output Resolution - Set. Caller passes port=1 for
-	 * quad-bypass/daisy-chain (only port 1 exists there) and 1-4 for single-view-seamless.
-	 */
-	async setOutputResolution(port: number, mode: number): Promise<void> {
-		await this.api.sendCommand('2060', { func: 'set', type: 'resolution', port, mode })
-	}
+	// K/M Control - Set (Table 1.3.4.6 / 1.3.5.3) and Output Resolution - Set (Tables 1.3.4.9/1.3.4.10
+	// and section 1.3.5) used to live here. Section 1.3.1 documents both for the 4K60 as well, in the
+	// same request shape, so they moved to `SequoiaAdapter` as `setKmControl` and
+	// `setOutputResolution`. The mode restrictions the 4K60L sections describe are enforced by
+	// `actions.ts` gating, which is where every other mode restriction in this module already lives.
 
 	/** Section 1.3.5 Label Text - Set (daisy-chain only). `daisy:1` fixed; one port/label pair per call. */
 	async setLabel(port: number, label: string): Promise<void> {

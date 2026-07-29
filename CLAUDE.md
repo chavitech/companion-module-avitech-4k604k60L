@@ -41,7 +41,19 @@ Two things make it trustworthy, and both are worth preserving:
   `file://` could fire commands but never read the reply. The local server exists to read it.
 
 Its `COMMANDS` array is declarative — extending the bench to another guide section is a data
-change, not a rewrite. It currently covers section 1.3.2 only.
+change, not a rewrite. It currently covers sections 1.3.1 and 1.3.2.
+
+Two things the bench does that Companion does not:
+
+- **It has no colour picker.** §1.3.1's OSD colours are typed as `R,G,B` or `R,G,B,A` text and
+  parsed by `parseColor`. `src/system.ts` is deliberately _not_ imported here — it holds a runtime
+  import of `@companion-module/base` for `splitRgb`, which is exactly the dependency the bench
+  exists without. Its choice lists are duplicated in `bench.mjs` on purpose; the adapter calls are
+  still the real ones, which is the part that has to stay honest.
+- **It renders an unconditional `warn` on destructive commands.** Separate from `warnInDaisyChain`,
+  which only fires in daisy-chain mode. Reset Factory Defaults (§1.3.1.11) and Custom Preset —
+  Delete (§1.3.1.9) erase device state in every mode, and the bench fires on a single click with no
+  confirmation.
 
 ## Model / mode design
 
@@ -74,21 +86,38 @@ combination structurally impossible in config. Preserve that property:
     `setWindowLabel`, `setWindowShow`, `setWindowAspect`, `setFullscreen`) are **concrete**. The
     guide documents §1.3.2 once for "Sequoia 4K60/4K60L" with a single request shape, so there is
     nothing for a subclass to branch on.
+  - The §1.3.1 system commands are **concrete** for the same reason. Note `setOsd`: the guide's
+    Tables 1.3.1.16–1.3.1.21 are six _tasks_ but one request (`2060` / `set` / `osd` / `data`), so
+    there is one method taking a `Partial<OsdSettings>`, and `actions.ts` provides the task-shaped
+    buttons. Each action writes only its own keys, so pressing one never disturbs another's
+    settings.
 - `sequoia-4k60.ts` / `sequoia-4k60l.ts` — concrete adapters.
 - `index.ts` — `createAdapter(mode, self, api)` factory, plus the public re-exports. Import
   adapters from `./adapters/index.js`, not the individual files.
 
-**Model-specific commands do not go on the base class.** K/M mode, output resolution, and
-daisy-chain label text exist only on the 4K60L (reference guide §1.3.4 / §1.3.5), so they live
-only on `Sequoia4K60LAdapter` and callers narrow with `instanceof` first. Resist the urge to
-hoist a method up to `base.ts` to avoid a narrowing check — the base class is deliberately the
-intersection of the two machines, not the union.
+**Model-specific commands do not go on the base class.** K/M reboot mode (`setKmRebootMode`,
+§1.3.4.5) and daisy-chain label text (`setLabel`, §1.3.5) exist only on the 4K60L, so they live only
+on `Sequoia4K60LAdapter` and callers narrow with `instanceof` first. Resist the urge to hoist a
+method up to `base.ts` to avoid a narrowing check — the base class is deliberately the intersection
+of the two machines, not the union.
+
+The test is what the _guide_ documents, not what is convenient. `setOutputResolution` and
+`setKmControl` were 4K60L-only until §1.3.1 was implemented, and moved to `base.ts` because §1.3.1
+documents both for the 4K60 as well — 1.3.1.4's `port = 1/2/3/4/5 (port 5 is only available for
+Sequoia 4K60)` and 1.3.1.13's "Sequoia 4K60 ... in Quad Multiview + Workstation mode". Sections
+1.3.4/1.3.5 describe the same requests a second time for the 4K60L; the shapes are byte-identical,
+so there is one method each. Mode restrictions still live in `actions.ts` gating, not in the
+adapters — `set_km_control` is registered for exactly the three modes the guide names and stays off
+the 4K60's Seamless Switching and the 4K60L's Single-View Seamless.
 
 **Daisy chain is treated as a closed list.** §1.3.5 names the only four commands assumed to work
-on a unit in daisy-chain mode. A command documented elsewhere is not registered for that mode even
-when it is otherwise model-agnostic — hence `actions.ts` gates all seven §1.3.2 actions behind
-`!isDaisyChain`, and `Sequoia4K60LAdapter.setLabel()` (§1.3.5, sends `daisy: 1`) stays a separate
-method from `SequoiaAdapter.setWindowLabel()` (§1.3.2, no `daisy` key) despite the overlap.
+on a unit in daisy-chain mode — Label Text, Audio, K/M Control and Output Resolution. A command
+documented elsewhere is not registered for that mode even when it is otherwise model-agnostic —
+hence `actions.ts` gates all seven §1.3.2 actions and all 22 daisy-chain-ineligible §1.3.1 actions
+behind `!isDaisyChain`, and `Sequoia4K60LAdapter.setLabel()` (§1.3.5, sends `daisy: 1`) stays a
+separate method from `SequoiaAdapter.setWindowLabel()` (§1.3.2, no `daisy` key) despite the overlap.
+In daisy-chain mode the action list is exactly those four commands; that is the property to check
+after touching gating.
 
 Bench-tested against a daisy-chained 4K60L on 2026-07-29, so this gating is now empirically
 justified rather than precautionary:
@@ -101,6 +130,27 @@ justified rather than precautionary:
   label, and afterwards the unit's own GUI can no longer edit labels manually. This is the one
   §1.3.2 command with a known harmful effect in this mode. Companion won't offer it there, but
   `tools/bench.mjs` does not gate by mode and will happily fire it.
+
+**§1.3.1 has not been bench-tested.** Every request shape in it was verified against the guide's
+worked examples and nothing more. That is a weaker claim than it sounds — the §1.3.2 findings above
+were also guide-faithful right up until hardware showed that `z` and `global_option` behave nothing
+like the documentation says. Specific things to establish on real hardware before trusting them:
+
+- The `get` responses (firmware, signal type, network, OSD info, custom preset list) are all
+  screenshot-only in the guide, so no captured shape is recorded for any of them. Signal Type
+  (§1.3.1.2) is the one worth capturing first — it is live per-window state and the only §1.3.1 read
+  worth driving feedbacks from.
+- Whether `setOsd` really is additive. The module assumes an unaddressed key is left alone, because
+  every worked example sends a partial `data` object. `setWindowGeometry` had to abandon exactly
+  that assumption. `getOsdInfo` is the read side to build on if it turns out to be wrong.
+- `idle_time` (§1.3.1.24) has a **blank** Cmd-Value row in the guide — no range, no units, no
+  disable value. Seconds is inferred from its single example (120 described as "2 minutes"); the
+  0–65535 bound in `actions.ts` is this module's invention, not the vendor's.
+
+Three places where the guide's prose and its worked example disagree, and the example was followed:
+`en` vs `enable` (§1.3.1.15), `mode` vs `sob_alarm` (§1.3.1.22), and `preset_num` vs `preset_unm`
+(§1.3.1.6). Also note §1.3.1.23's `enable` is inverted — `0` turns power saving **on** — which is
+the guide's wording, not a transcription error.
 
 `ModuleInstance.adapter` is rebuilt in both `init()` and `configUpdated()`, because changing the
 configured mode must swap the adapter and rebuild the action list.
@@ -136,6 +186,12 @@ Anything else that parses as JSON is returned parsed; anything that doesn't is r
 - `eslint.config.mjs` is generated by `@companion-module/tools`; don't hand-add rules casually.
 - `.yarnrc.yml` sets `enableScripts: false` and `npmMinimalAgeGate: 3d`. A dependency bump can
   be refused purely for being freshly published — check the publish date before debugging further.
+- **Per-section option modules.** `src/windows.ts` (§1.3.2) and `src/system.ts` (§1.3.1) hold the
+  dropdown choice lists, option-field builders and value conversions for their section, keeping
+  `actions.ts` to action definitions. Data types the adapters need (`WindowGeometry`, `OsdSettings`,
+  `DeviceColor`) are declared in `base.ts` and flow **outward** to these modules — never the
+  reverse. That is what lets `system.ts` hold a value import of `@companion-module/base` for
+  `splitRgb` without dragging it into the adapter chain and breaking the bench.
 - Actions, feedbacks, presets, and variables are each registered from their own module via an
   `Update*(self)` function called from `ModuleInstance`. Keep that shape; `actions.ts` is by far
   the largest file and is where mode-dependent option lists are built.
