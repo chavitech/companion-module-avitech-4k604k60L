@@ -6,3 +6,8 @@ package-lock.json
 DEBUG-*
 /.yarn
 /.vscode
+
+# Vendor reference docs (not ours to redistribute)
+*.pdf
+# Windows Mark-of-the-Web alternate data streams, materialized as files by WSL
+*:Zone.Identifier
